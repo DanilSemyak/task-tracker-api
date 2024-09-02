@@ -1,11 +1,18 @@
 package ru.semyak.task_tracker_api.store.entities;
 
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
-import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
+// не используем @Data, чтобы не терять производительность из-за @HashCode and @Equals на листе
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Entity
 @Table(name = "task_state")
 public class TaskStateEntity {
@@ -19,8 +26,11 @@ public class TaskStateEntity {
 
     private Long ordinal;
 
+    @Builder.Default
     private Instant createdAt = Instant.now();
 
+    @Builder.Default
     @OneToMany
-    private List<TaskEntity> tasks;
+    @JoinColumn(name = "task_state_id", referencedColumnName = "id")
+    private List<TaskEntity> tasks = new ArrayList<>();
 }

@@ -1,10 +1,15 @@
 package ru.semyak.task_tracker_api.store.entities;
 
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.Instant;
-import java.time.LocalDate;
 
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Entity
 @Table(name = "task")
 public class TaskEntity {
@@ -18,5 +23,6 @@ public class TaskEntity {
 
     private String description;
 
+    @Builder.Default
     private Instant createdAt = Instant.now();
 }
