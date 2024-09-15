@@ -25,14 +25,12 @@ public class ProjectController {
     private final ProjectRepository projectRepository;
     private final ProjectDtoFactory projectDtoFactory;
 
-    public static final String FETCH_PROJECTS = "api/projects";
-    public static final String CREATE_PROJECT = "api/projects";
-    public static final String EDIT_PROJECT = "api/projects/{project_id}";
-    public static final String DELETE_PROJECT = "api/projects/{project_id}";
-    public static final String CREATE_OR_UPDATE_PROJECTS = "api/projects";
+    public static final String FETCH_PROJECTS = "/api/projects";
+    public static final String DELETE_PROJECT = "/api/projects/{project_id}";
+    public static final String CREATE_OR_UPDATE_PROJECT = "/api/projects";
 
-    @PostMapping(FETCH_PROJECTS)
-    public List<ProjectDTO> fetchProject(
+    @GetMapping(FETCH_PROJECTS)
+    public List<ProjectDTO> fetchProjects(
             @RequestParam(value = "prefix_name", required = false) Optional<String> optionalPrefixName) {
 
         optionalPrefixName = optionalPrefixName.filter(prefixName -> !prefixName.trim().isEmpty());
@@ -41,63 +39,54 @@ public class ProjectController {
                 .map(projectRepository::streamAllByNameStartsWithIgnoreCase)
                 .orElseGet(projectRepository::streamAll).stream();
 
-        if (optionalPrefixName.isPresent()) {
-            projectStream = projectRepository.
-                    streamAllByNameStartsWithIgnoreCase(optionalPrefixName.get()).stream();
-        } else {
-            projectStream = projectRepository.streamAll().stream();
-        }
-
-        return projectStream.map(projectDtoFactory::makeProjectDto)
+        return projectStream
+                .map(projectDtoFactory::makeProjectDto)
                 .collect(Collectors.toList());
     }
 
-    @PostMapping(CREATE_PROJECT)
-    public ProjectDTO createProject(@RequestParam String name) {
+    @PutMapping(CREATE_OR_UPDATE_PROJECT)
+    public ProjectDTO createOrUpdateProject(
+            @RequestParam(value = "project_id", required = false) Optional<Long> optionalProjectId,
+            @RequestParam(value = "project_name", required = false) Optional<String> optionalProjectName
+            // Another params...
+    ) {
 
-        if (name.trim().isEmpty()) {
-            throw new BadRequestException("Имя проекта не должно быть пустым");
+        optionalProjectName = optionalProjectName.filter(projectName -> !projectName.trim().isEmpty());
+
+        boolean isCreate = !optionalProjectId.isPresent();
+
+        if (isCreate && !optionalProjectName.isPresent()) {
+            throw new BadRequestException("Название проекта не может быть пустым.");
         }
 
-        projectRepository.findByName(name).ifPresent(project -> {
-            throw new BadRequestException(String.format("Проект с именем \"%s\" уже существует", name));
-        });
+        final ProjectEntity project = optionalProjectId
+                .map(this::getProjectOrThrowException)
+                .orElseGet(() -> ProjectEntity.builder().build());
 
-        ProjectEntity project = projectRepository.saveAndFlush(
-                ProjectEntity.builder()
-                        .name(name)
-                        .build()
-        );
-        return projectDtoFactory.makeProjectDto(project);
-    }
+        optionalProjectName
+                .ifPresent(projectName -> {
 
+                    projectRepository
+                            .findByName(projectName)
+                            .filter(anotherProject -> !Objects.equals(anotherProject.getId(), project.getId()))
+                            .ifPresent(anotherProject -> {
+                                throw new BadRequestException(
+                                        String.format("Проект \"%s\" уже существует.", projectName)
+                                );
+                            });
 
-    @PatchMapping(EDIT_PROJECT)
-    public ProjectDTO editProject(@PathVariable("project_id") Long projectId, @RequestParam String name) {
-
-        if (name.trim().isEmpty()) {
-            throw new BadRequestException("Имя проекта не должно быть пустым");
-        }
-
-        ProjectEntity project = getProjectOrThrowException(projectId);
-
-        projectRepository.findByName(name)
-                .filter(anotherProject -> !Objects.equals(anotherProject.getId(), projectId))
-                .ifPresent(anotherProject -> {
-                    throw new BadRequestException(String.format("Проект с именем \"%s\" уже существует", name));
+                    project.setName(projectName);
                 });
 
-        project.setName(name);
+        final ProjectEntity savedProject = projectRepository.saveAndFlush(project);
 
-        project = projectRepository.saveAndFlush(project);
-
-        return projectDtoFactory.makeProjectDto(project);
+        return projectDtoFactory.makeProjectDto(savedProject);
     }
 
     @DeleteMapping(DELETE_PROJECT)
     public AskDTO deleteProject(@PathVariable("project_id") Long projectId) {
 
-        ProjectEntity project = getProjectOrThrowException(projectId);
+        getProjectOrThrowException(projectId);
 
         projectRepository.deleteById(projectId);
 
@@ -105,9 +94,17 @@ public class ProjectController {
     }
 
     private ProjectEntity getProjectOrThrowException(Long projectId) {
+
         return projectRepository
                 .findById(projectId)
-                .orElseThrow(() -> new NotFoundException(String.format("Проект с id \"%s\" не существует", projectId)));
+                .orElseThrow(() ->
+                        new NotFoundException(
+                                String.format(
+                                        "Проекта с именем \"%s\" не существует.",
+                                        projectId
+                                )
+                        )
+                );
     }
-
 }
+
